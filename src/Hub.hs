@@ -1,0 +1,3 @@
+module Hub
+
+where
