@@ -1,11 +1,10 @@
 module Day3
-  ( solve )
+
 where
 
 import Prelude
 
 import RIO.List.Partial (head)
-import Util             (loadDat)
 
 import qualified RIO.Set  as S
 import qualified RIO.Text as T
@@ -41,16 +40,16 @@ hasTree tr (r, c) = (r, c `mod` tr^.width) `elem` tr^.trees
 
 
 --------------------------------------------------------------------------------
--- Define the walk and solve the problem
+-- Solve the problem
 
--- | Stepsize right for each line down
-type Step = Int
+-- | Stepsize in x and y
+type Step = (Int, Int)
 
 -- | Given a Walk and some Trees, calculate the collisions
 countBumps :: Step -> Terrain -> Int
-countBumps w t =
-  let walk = map (\r -> (r, w * r)) [0..t^.height]
-  in  foldl' (\acc c -> if hasTree t c then acc + 1 else acc) 0 walk
+countBumps (x, y) t =
+  let walk = zip [0,y..t^.height] [0,x..] -- NOTE: We reverse coordinates
+  in foldl' (\acc c -> if hasTree t c then acc + 1 else acc) 0 walk
 
 -- | Load terrain from disc
 loadTerrain :: IO Terrain
@@ -60,5 +59,18 @@ loadTerrain = readTerrain <$> loadDat "day3_terrain.txt"
 solve :: Step -> IO Int
 solve n = countBumps n <$> loadTerrain
 
--- >>> solve 3
+-- >>> solve (3, 1)
 -- 181
+
+--------------------------------------------------------------------------------
+-- Solve the second problem
+
+-- | Put it all together again
+solve2 :: IO Int
+solve2 = do
+  terrain <- loadTerrain
+  let slopes = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)]
+  pure . product $ map (flip countBumps terrain) slopes
+
+-- >>> solve2
+-- 1260601650
