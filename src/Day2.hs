@@ -1,5 +1,5 @@
 module Day2
-
+ 
 where
 
 import Prelude
@@ -38,12 +38,12 @@ isValid e = e^.minCount <= n && n <= e^.maxCount
     n :: Int
     n = T.count (T.singleton $ e^.target) $ e^.password
 
---------------------------------------------------------------------------------
--- | Solve the puzzle
-
 -- | The list of entries as parsed from the file
 entries :: IO [Entry]
 entries = parseDat "day2_passwords.txt" $ many entryP
+
+--------------------------------------------------------------------------------
+-- | Solve the puzzle
 
 -- | Count the valid entries
 solve :: IO Int
