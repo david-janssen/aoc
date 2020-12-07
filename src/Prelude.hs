@@ -5,6 +5,11 @@ module Prelude
   , loadDat
   , parseDat
 
+  , sc
+  , lexeme
+  , intP
+  , symbol
+ 
   , xor
   , count
   , inBounds
@@ -21,12 +26,15 @@ import RIO as X hiding
   , (^..), (^?), preview, (%~), (.~)
   )
 
-import Control.Lens as X
-import Text.Megaparsec as X hiding (many, some, try, noneOf, count)
-import Text.Megaparsec.Char as X
+import RIO.Partial as X (fromJust)
+
+import Control.Lens                          as X
+import Text.Megaparsec                       as X hiding (many, some, try, noneOf, count)
+import Text.Megaparsec.Char                  as X
 
 -- Only to define utils
-import qualified RIO.Text as T
+import qualified RIO.Text                    as T
+import qualified Text.Megaparsec.Char.Lexer  as L
 
 
 --------------------------------------------------------------------------------
@@ -53,6 +61,22 @@ parseDat f p = do
 
 -- | Base type for parsers
 type Parser = Parsec Void Text
+
+-- | Consume whitespace
+sc :: Parser ()
+sc = L.space space1 empty empty
+
+-- | Turn a parser into one that consumes whitespace after it succeeds
+lexeme :: Parser a -> Parser a
+lexeme = L.lexeme sc
+
+-- | Parse an integer
+intP :: Parser Int
+intP = fromJust . readMaybe <$> some digitChar
+
+-- | Parse a symbol
+symbol :: Text -> Parser ()
+symbol = void . L.symbol sc
 
 --------------------------------------------------------------------------------
 -- | Little utilities
