@@ -26,10 +26,12 @@ import RIO as X hiding
   , (^..), (^?), preview, (%~), (.~)
   )
 
+import Text.Megaparsec as X hiding
+  (many, some, try, noneOf, count, State)
+
 import RIO.Partial as X (fromJust)
 
 import Control.Lens                          as X
-import Text.Megaparsec                       as X hiding (many, some, try, noneOf, count)
 import Text.Megaparsec.Char                  as X
 
 -- Only to define utils
