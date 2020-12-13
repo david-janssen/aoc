@@ -33,6 +33,7 @@ import RIO.Partial as X (fromJust)
 
 import Control.Lens                          as X
 import Text.Megaparsec.Char                  as X
+import System.IO                             as X (print)
 
 -- Only to define utils
 import qualified RIO.Text                    as T
