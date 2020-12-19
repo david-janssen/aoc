@@ -75,19 +75,26 @@ load = parseDat "day19_rules.txt" fileP
 expl :: IO (Rule, [Msg])
 expl = parseDat "day19_example.txt" fileP
 
-t1, t2, t3 :: Text
-t1 = "26: \"a\""
-t2 = "64: 16 15 | 26 21"
-t3 = "125: 16 16"
+--------------------------------------------------------------------------------
 
-foo :: IO ()
-foo = do
-  (r, ms) <- parseDat "day19_example.txt" fileP
-  print r
-  mapM_ print ms
+-- | Turn a message into all the possible lists of messages left by consuming
+-- all matching input for some rule.
+--
+-- NOTE: [] would signify failure, whereas [[]] signifies success.
+munch :: Rule -> Msg -> [Msg]
+munch (Mat A) (A:msg)   = [msg]
+munch (Mat B) (B:msg)   = [msg]
+munch (Ser []) msg      = [msg]
+munch (Ser (r:rs)) msg  = concatMap (munch (Ser rs)) (munch r msg)
+munch (Opt rs) msg      = concatMap (flip munch msg) rs
+munch _ _               = []
 
+solve :: IO Int
+solve = do
+  (r, ms) <- parseDat "day19_rules.txt" fileP
+  pure . count (any null) . map (munch r) $ ms
 
-
-match :: Rule -> Msg -> Bool
-match (Mat A) [A] = True
-match (Mat B) [B] = True
+solve2 :: IO Int
+solve2 = do
+  (r, ms) <- parseDat "day19_rules2.txt" fileP
+  pure . count (any null) . map (munch r) $ ms
