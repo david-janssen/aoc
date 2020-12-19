@@ -2,25 +2,41 @@ module Day11
 
 where
 
-import Prelude hiding (Empty, lookup)
+import Prelude hiding (Empty, lookup, _Empty)
 
--- import RIO.List.Partial (head)
--- import qualified RIO.Vector.Boxed as V
+import Coor
 
-import qualified Grid as G
+import RIO.List.Partial (head, tail)
+import RIO.Partial (fromJust)
+
+import qualified RIO.HashMap as M
 
 --------------------------------------------------------------------------------
--- | Define the data representation
+-- | Storing data in a grid
 
 -- | The values an element of the grid can take
 data Seat = Floor | Empty | Full
   deriving (Eq, Show)
+makePrisms ''Seat
 
+-- | Size of a grid in (w, h)
+type Size = (Int, Int)
 
--- | The 8 directions to consider
-data Direction = U | UR | R | DR | D | DL | L | UL deriving (Eq, Show, Enum)
+-- | A mapping from coordinates to seats
+data Grid = Grid
+  { _dim :: Size                -- ^ The width and height of the grid
+  , _dat :: M.HashMap Coor Seat -- ^ The contents of the grid
+  } deriving (Eq, Show)
+makeLenses ''Grid
 
+-- | Return the L-to-R, T-to-B walk over some grid-space
+walk :: Size -> [[Coor]]
+walk (w, h) = [[(x, y) | x <- [0 .. w - 1]] | y <- [0 .. h - 1]]
 
+-- -- | Create a new grid by walkind some function of the coordinate and the old
+-- -- grid over each coordinate.
+-- walkWith :: (Grid -> Coor -> Seat) -> Grid -> Grid
+-- walkWith f = \g -> Grid (d^.dim)
 
 -- | Parse a single 'Seat'
 cellP :: Parser Seat
@@ -30,61 +46,93 @@ cellP = Empty <$ char 'L' <|> Full <$ char '#' <|> Floor <$ char '.'
 gridP :: Parser Grid
 gridP = do
   xs <- some (someTill cellP (void eol <|> eof))
-  pure $ Grid (V.fromList . concat $ xs) (Coor (length $ head xs, length xs))
+  let wh = ((length $ head xs, length xs))
+  pure . Grid wh . M.fromList . zip (concat $ walk wh) $ (concat xs)
+
+-- | Lookup the coordinate in a grid
+grab :: Grid -> Coor -> Maybe Seat
+grab g c = g^.dat.at c
+
+-- | Pretty-print a grid back into its textual representation
+ppGrid :: Grid -> IO ()
+ppGrid g = do
+  let f Floor = '.'
+      f Full  = '#'
+      f Empty = 'L'
+  putStrLn . unlines . map (map (f . fromJust . grab g)) . walk $ g^.dim
+
+-- | Load the provided 'Grid' from disc
+loadGrid :: IO Grid
+loadGrid = parseDat "day11_seats.txt" gridP
+
+-- | Load the smaller-scale example
+loadTest :: IO Grid
+loadTest = parseDat "day11_test.txt" gridP
 
 --------------------------------------------------------------------------------
--- $ops
+-- | Cutting paths across a grid in 8 directions
 
--- | Try to lookup a value in a grid
-lookup :: Coor -> Grid -> Maybe Seat
-lookup c@(Coor (x, y)) g | c < g^.dim = undefined
-
--- -- | Pretty-print the grid
--- pp :: Grid -> IO ()
--- pp g = mapM_ print . G.toList $ f <$> g
---   where f Floor = '.'
---         f Full  = '#'
---         f Empty = 'L'
-
--- -- | Load the provided 'Grid' from disc
--- loadGrid :: IO Grid
--- loadGrid = parseDat "day11_seats.txt" gridP
-
--- -- | Load the example to test stuff first
--- loadTest :: IO Grid
--- loadTest = parseDat "day11_test.txt" gridP
-
--- -- | Repeat an action until its result stabilizes
--- stabilize :: Eq a => (a -> a) -> a -> a
--- stabilize f a = let new = f a in if new == a then a else stabilize f new
-
--- --------------------------------------------------------------------------------
--- -- | Solve the second problem
--- --
--- -- The previous simulation was already a bit slow, we're going to take a
--- -- slightly different approach than the cell-wise algorithm from before.
--- -- Instead, per step we build up 8 grids (1 for each direction), then we combine
--- -- them into the next step.
+-- | Repeat an action until its result stabilizes
+stabilize :: Eq a => (a -> a) -> a -> a
+stabilize f a = let new = f a in if new == a then a else stabilize f new
 
 
--- -- | The coordinate-change matched to its direction
--- dStep :: Direction -> (Int, Int)
--- dStep U  = ( 0 ,  1)
--- dStep UR = ( 1 ,  1)
--- dStep R  = ( 1 ,  0)
--- dStep DR = (-1 ,  1)
--- dStep D  = ( 0 , -1)
--- dStep DL = (-1 , -1)
--- dStep L  = (-1 ,  0)
--- dStep UL = (-1 ,  1)
+-- | Return wether a coordinate falls in [0, w), [0, h)
+bounded :: Coor -> Size -> Bool
+bounded (x, y) (w, h) = x >= 0 && y >= 0 && x < w && y < h
 
--- -- -- | Take all the slices through a grid for a direction.
--- -- slice :: Grid -> Direction -> [[Seat]]
--- -- slice g d = undefined
+--------------------------------------------------------------------------------
+-- | Solve the first problem
 
--- --   where
--- --     (w, h)   = size g
--- --     (dx, dy) = dStep d
--- --     ox =
+-- | Evaluate how `busy` a seat is by counting its direct, occupied neighbors
+busy1 :: Grid -> Coor -> Int
+busy1 g c =
+  let cs = c ^.. neighbors . filtered (`bounded` (g^.dim))
+  in length $ cs ^.. folded . to (grab g) . _Just . _Full
 
--- --     ori =
+-- | Step the grid once according to the rules
+step1 :: Grid -> Grid
+step1 g = Grid (g^.dim) $ M.mapWithKey f (g^.dat)
+  where
+    f _ Floor = Floor
+    f c s = let n = busy1 g c in case s of
+      Empty | n == 0 -> Full
+      Full  | n > 3  -> Empty
+      _              -> s
+
+-- | Solve the first problem
+solve1 :: IO Int
+solve1 = count (Full ==) . view dat . stabilize step1 <$> loadGrid
+
+-- >>> solve1
+-- 2321
+
+--------------------------------------------------------------------------------
+-- | Solve the second problem
+
+-- | Return the first non-floor seat visible in a direction from a coor
+look :: Grid -> Coor -> Direction -> Maybe Seat
+look g c d = let c' = shift 1 d c in case grab g c' of
+  Just Floor -> look g c' d
+  x          -> x
+
+-- | Evaluate how `busy` a seat is by looking in all 8 directions
+busy2 :: Grid -> Coor -> Int
+busy2 g c = length $ [U .. UL] ^.. folded . to (look g c) . _Just . _Full
+
+-- | Step the grid once according to the rules
+step2 :: Grid -> Grid
+step2 g = Grid (g^.dim) $ M.mapWithKey f (g^.dat)
+  where
+    f _ Floor = Floor
+    f c s = let n = busy2 g c in case s of
+      Empty | n == 0 -> Full
+      Full  | n > 4  -> Empty
+      _              -> s
+
+-- | Solve the first problem
+solve2 :: IO Int
+solve2 = count (Full ==) . view dat . stabilize step2 <$> loadGrid
+
+-- >>> solve2
+-- 2102

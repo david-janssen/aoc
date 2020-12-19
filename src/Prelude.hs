@@ -4,15 +4,19 @@ module Prelude
   , Parser
   , loadDat
   , parseDat
+  , prs
 
   , sc
   , lexeme
   , intP
   , symbol
+  , sepBy2
  
   , xor
   , count
   , inBounds
+
+  , putStrLn
   )
 where
 
@@ -23,14 +27,16 @@ import RIO as X hiding
 
     -- The following line is required for newer stack releases.
     -- This is also the reason for the OPTIONS_GHC pragma
-  , (^..), (^?), preview, (%~), (.~)
+  , (^..), (^?), preview, (%~), (.~), try
   )
 
 import Text.Megaparsec as X hiding
-  (many, some, try, noneOf, count, State)
+  (many, some, noneOf, count, State, pos1)
 
 import RIO.Partial as X (fromJust)
+import RIO.List.Partial as X (head)
 
+import Control.Arrow                         as X ((***), (|||))
 import Control.Lens                          as X
 import Text.Megaparsec.Char                  as X
 import System.IO                             as X (print)
@@ -38,6 +44,7 @@ import System.IO                             as X (print)
 -- Only to define utils
 import qualified RIO.Text                    as T
 import qualified Text.Megaparsec.Char.Lexer  as L
+import qualified System.IO                   as SO (putStrLn)
 
 
 --------------------------------------------------------------------------------
@@ -53,11 +60,7 @@ loadDat = readFileUtf8 .  datfile
 
 -- | Run a parser on a file in the `dat` folder and return the result
 parseDat :: Text -> Parser a -> IO a
-parseDat f p = do
-  txt <- loadDat f
-  case parse p "" txt of
-    Left e  -> error (errorBundlePretty e)
-    Right x -> pure x
+parseDat f p = prs p <$> loadDat f
 
 --------------------------------------------------------------------------------
 -- | Parsing helpers
@@ -81,6 +84,18 @@ intP = fromJust . readMaybe <$> some digitChar
 symbol :: Text -> Parser ()
 symbol = void . L.symbol sc
 
+-- | Parse multiple occurences of parser `a` separated by `b` with at least 2
+-- a's and 1 b occurring.
+sepBy2 :: Parser a -> Parser b -> Parser [a]
+sepBy2 a sep = try $ (:) <$> a <*> some (try $ sep *> a)
+
+   -- sepBy2 intP (char ' ') --((:) <$> intP <*> many (try $ char ' ' *> intP))
+-- | Force run a parser, error on fail
+prs :: Parser a -> Text -> a
+prs p txt = case parse p "" txt of
+  Left e  -> error . errorBundlePretty $ e
+  Right x -> x
+
 --------------------------------------------------------------------------------
 -- | Little utilities
 
@@ -97,3 +112,7 @@ count p = sum . map (\a -> if p a then 1 else 0) . toList
 -- | Return whether a value falls within 2 bounds (inclusive)
 inBounds :: Ord a => a -> a -> a -> Bool
 inBounds x lower upper = lower <= x && x <= upper
+
+-- | Friendlier putStrLn from System.IO
+putStrLn :: MonadIO m => Text -> m ()
+putStrLn = liftIO . SO.putStrLn . T.unpack
